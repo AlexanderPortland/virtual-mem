@@ -1,4 +1,4 @@
-#lang forge/froglet
+#lang forge/temporal
 
 open "addr.frg"
 open "utils.frg"

@@ -1,18 +1,18 @@
-#lang forge/froglet
+#lang forge/temporal
 
 open "addr.frg"
 open "pt.frg"
 open "utils.frg"
 
-one sig Root {
-    pt: one L2PageTable
+sig Process {
+    root: one L2PageTable
 }
 
 // Ensure that all physical addresses have a virtual address that maps to them 
 pred all_pages_mapped {
     all pa: PhysicalPage | {
-        some va: VirtualAddress | {
-            walk[va, Root.pt] = pa
+        some va: VirtualAddress, proc: Process | {
+            walk[va, proc.root] = pa
         }
     }
 }
@@ -25,9 +25,15 @@ pred clean__no_orphan_pagetables {
         }
     }
 
-    // Only one l2 pagetable, and it's the root
-    // TODO: change this when having multiple processes
-    all l2: L2PageTable | l2 = Root.pt
+    // No orphan pagetable entries either
+    all pt_entry: L1PageTableEntry | {
+        some pt: L1PageTable, index: L1Index | {
+            pt.l1_entries[index] = pt_entry
+        }
+    }
+
+    // Each l2 page table must be the root for some process
+    all l2: L2PageTable | some proc: Process | l2 = proc.root
 }
 
 pred all_clean {
@@ -42,5 +48,5 @@ pred all_wellformed {
 run {
     all_wellformed
     all_clean
-    all_pages_mapped
-} for exactly 4 PhysicalPage, exactly 1 L1PageTable
+    // all_pages_mapped
+} for exactly 4 PhysicalPage, exactly 2 Process, exactly 3 L1PageTableEntry

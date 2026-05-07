@@ -1,4 +1,4 @@
-#lang forge/froglet
+#lang forge/temporal
 
 // A virtual memory address that a userland process will see & operate on.
 sig VirtualAddress {
@@ -30,6 +30,7 @@ one sig Mem {
 pred addr_wellformed {
     wf__all_phys_addresses_exist
     wf__no_extra_phys_addresses
+    wf__phys_pages_linear
 }
 
 // RULE: a physical address should exist for all combination of physical page & offset.
@@ -43,4 +44,11 @@ pred wf__no_extra_phys_addresses {
         some p: PhysicalPage, o: Offset | 
             pa.frame = p and pa.pa_offset = o
     }
+}
+
+pred wf__phys_pages_linear {
+    // No cycles
+    all p: PhysicalPage | p not in p.^(Mem.next)
+    // Only one starting page
+    lone p: PhysicalPage | no prev: PhysicalPage | Mem.next[prev] = p
 }
