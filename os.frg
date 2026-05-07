@@ -8,6 +8,10 @@ sig Process {
     root: one L2PageTable
 }
 
+one sig OS {
+    var current_proc: one Process
+}
+
 // Ensure that all physical addresses have a virtual address that maps to them 
 pred all_pages_mapped {
     all pa: PhysicalPage | {
@@ -62,20 +66,60 @@ pred wf__no_shared_root_pts {
 
 pred cpu_wellformed {
     wf__no_shared_root_pts
+    traces
 }
 
-pred all_clean {
-    clean__no_orphan_pagetables
+pred do_nothing {
+    -- All var fields remain unchanged
+    L1PageTable.l1_entries' = L1PageTable.l1_entries
+    L1PageTableEntry.page' = L1PageTableEntry.page
+    L1PageTableEntry.write' = L1PageTableEntry.write
+    L1PageTableEntry.user' = L1PageTableEntry.user
+    OS.current_proc' = OS.current_proc
 }
 
-pred all_wellformed {
-    addr_wellformed
-    pt_wellformed
-    cpu_wellformed
+pred context_switch[new_proc: Process] {
+    OS.current_proc' = new_proc
 }
 
-run {
-    all_wellformed
-    all_clean
-    // all_pages_mapped
-} for exactly 5 PhysicalPage, exactly 2 Process, exactly 4 L1PageTableEntry
+// Kernel allocate
+pred allocate[va: VirtualAddress] {
+    no walk[va, OS.current_proc.root]
+
+    some free_page: PhysicalPage | {
+        all proc: Process, any_va: VirtualAddress | walk[any_va, OS.current_proc.root] != free_page
+        let entry = OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0] | {
+            -- Set the mapping and permissions in the NEXT state
+            entry.page' = free_page
+            entry.write' = True
+            entry.user' = True
+        }
+        all other_entry: L1PageTableEntry | {
+            (other_entry != OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0]) implies {
+                other_entry.page' = other_entry.page
+                other_entry.write' = other_entry.write
+                other_entry.user' = other_entry.user
+            }
+        }
+        
+        OS.current_proc' = OS.current_proc
+    }
+}
+
+pred traces {
+    -- Initial State: Everything is empty
+    all l1: L1PageTable, idx: L1Index | no l1.l1_entries[idx]
+    
+    -- Transitions
+    always {
+        step
+    }
+}
+
+pred step {
+    { some new_proc: Process | new_proc != OS.current_proc and context_switch[new_proc] } 
+    or 
+    { some va: VirtualAddress | allocate[va] }
+    or 
+    { do_nothing }
+}
