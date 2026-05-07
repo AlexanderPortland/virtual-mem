@@ -36,6 +36,16 @@ pred clean__no_orphan_pagetables {
     all l2: L2PageTable | some proc: Process | l2 = proc.root
 }
 
+pred wf__no_shared_root_pts {
+    all disj proc1, proc2: Process {
+        proc1.root != proc2.root
+    }
+}
+
+pred cpu_wellformed {
+    wf__no_shared_root_pts
+}
+
 pred all_clean {
     clean__no_orphan_pagetables
 }
@@ -43,6 +53,7 @@ pred all_clean {
 pred all_wellformed {
     addr_wellformed
     pt_wellformed
+    cpu_wellformed
 }
 
 run {
