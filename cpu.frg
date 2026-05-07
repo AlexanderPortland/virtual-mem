@@ -43,4 +43,4 @@ run {
     all_wellformed
     all_clean
     all_pages_mapped
-} for exactly 4 PhysicalAddress
+} for exactly 4 PhysicalPage, exactly 1 L1PageTable
