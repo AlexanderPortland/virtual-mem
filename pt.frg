@@ -4,11 +4,11 @@ open "addr.frg"
 open "utils.frg"
 
 sig L1PageTableEntry {
-    page: one PhysicalPage,
+    var page: one PhysicalPage,
     // Whether the page is writable
-    write: one Bool,
+    var write: one Bool,
     // Whether the page is user-accessible
-    user: one Bool
+    var user: one Bool
 }
 
 sig L2PageTable {
@@ -16,7 +16,7 @@ sig L2PageTable {
 }
 
 sig L1PageTable {
-    l1_entries: pfunc L1Index -> L1PageTableEntry
+    var l1_entries: pfunc L1Index -> L1PageTableEntry
 }
 
 fun walk(va: VirtualAddress, root: L2PageTable): lone PhysicalPage {
