@@ -12,7 +12,7 @@ one sig OS {
     var current_proc: one Process
 }
 
-// Ensure that all physical addresses have a virtual address that maps to them 
+-- Ensure that all physical addresses have a virtual address that maps to them 
 pred all_pages_mapped {
     all pa: PhysicalPage | {
         some va: VirtualAddress, proc: Process | {
@@ -22,21 +22,21 @@ pred all_pages_mapped {
 }
 
 pred clean__no_orphan_pagetables {
-    // Every l1 pagetable can be accessed from the root pagetable
+    -- Every l1 pagetable can be accessed from the root pagetable
     all l1_pt: L1PageTable {
         some l2_index: L2Index, l2_pt: L2PageTable | {
             l2_pt.l2_entries[l2_index] = l1_pt
         }
     }
 
-    // No orphan pagetable entries either
+    -- No orphan pagetable entries either
     all pt_entry: L1PageTableEntry | {
         some pt: L1PageTable, index: L1Index | {
             pt.l1_entries[index] = pt_entry
         }
     }
 
-    // Each l2 page table must be the root for some process
+    -- Each l2 page table must be the root for some process
     all l2: L2PageTable | some proc: Process | l2 = proc.root
 }
 
@@ -46,80 +46,98 @@ pred wf__no_shared_root_pts {
     }
 }
 
-// Each physical page should only be reachable once per process.
-// I don't think this is a hard rule for VM systems, but it rules out some funky edge cases that wouldn't
-// show up in practice.
-// TODO: this is actually kinda hard, so fix if we have time...
-// pred wf__only_reachable_once_per_proc {
-//     all pa: PhysicalPage, proc: Process | {
-//         all disj va1: VirtualAddress, va2: VirtualAddress | {
-//             {not {
-//                 va1.vpn1 = va2.vpn1
-//                 va1.vpn0 = va2.vpn0
-//             }} implies {
-//                 {walk[va1, proc.root] = pa} implies {not { walk[va2, proc.root] = pa}}
-//                 {walk[va2, proc.root] = pa} implies {not { walk[va1, proc.root] = pa}}
-//             }
-//         }
-//     }
-// }
-
 pred cpu_wellformed {
     wf__no_shared_root_pts
     traces
 }
 
+-- Frame conditions: keep everything frozen
 pred do_nothing {
-    -- All var fields remain unchanged
-    L1PageTable.l1_entries' = L1PageTable.l1_entries
-    L1PageTableEntry.page' = L1PageTableEntry.page
-    L1PageTableEntry.write' = L1PageTableEntry.write
-    L1PageTableEntry.user' = L1PageTableEntry.user
+    l2_entries' = l2_entries
+    l1_entries' = l1_entries
+    page' = page
+    write' = write
+    user' = user
     OS.current_proc' = OS.current_proc
 }
 
 pred context_switch[new_proc: Process] {
     OS.current_proc' = new_proc
+    -- MANDATORY: Keep the page tables from changing during a switch!
+    l2_entries' = l2_entries
+    l1_entries' = l1_entries
+    page' = page
+    write' = write
+    user' = user
 }
 
-// Kernel allocate
+-- Kernel allocate
+-- Corrected allocate in os.frg
+-- In os.frg
+
 pred allocate[va: VirtualAddress] {
+    -- Pre-condition: No mapping exists yet for this address
     no walk[va, OS.current_proc.root]
 
-    some free_page: PhysicalPage | {
-        all proc: Process, any_va: VirtualAddress | walk[any_va, OS.current_proc.root] != free_page
-        let entry = OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0] | {
-            -- Set the mapping and permissions in the NEXT state
-            entry.page' = free_page
-            entry.write' = True
-            entry.user' = True
-        }
-        all other_entry: L1PageTableEntry | {
-            (other_entry != OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0]) implies {
-                other_entry.page' = other_entry.page
-                other_entry.write' = other_entry.write
-                other_entry.user' = other_entry.user
-            }
-        }
+    some free_page: PhysicalPage, new_ent: L1PageTableEntry, l1_table: L1PageTable | {
+        -- 1. AVAILABILITY CHECKS
+        -- Ensure the page isn't already pointed to by any entry
+        free_page not in L1PageTableEntry.page
+        // -- Ensure the entry isn't already part of any L1 table
+        // new_ent not in L1PageTable.l1_entries.L1PageTableEntry
+        -- Ensure the L1 table isn't already in the L2 (if it's a new allocation)
+        -- Note: You might want to allow sharing L1 tables if vpn1 matches!
+
+        -- 2. APPLY MAPPINGS
+        l2_entries' = l2_entries + (OS.current_proc.root -> va.vpn1 -> l1_table)
+        l1_entries' = l1_entries + (l1_table -> va.vpn0 -> new_ent)
+
+        -- 3. APPLY ATTRIBUTES
+        page' = page ++ (new_ent -> free_page)
+        write' = write ++ (new_ent -> True)
+        user' = user ++ (new_ent -> True)
+
+        -- 4. FRAME CONDITIONS
+        OS.current_proc' = OS.current_proc
+    }
+}
+
+-- Kernel free
+pred free[va: VirtualAddress] {
+    -- Pre-condition: Must be mapped to be freed
+    some walk[va, OS.current_proc.root]
+
+    let l1_table = OS.current_proc.root.l2_entries[va.vpn1] | {
+        -- Remove the entry link from the table
+        l1_entries' = l1_entries - (l1_table -> va.vpn0 -> L1PageTableEntry)
         
+        -- Everything else stays exactly as it was
+        l2_entries' = l2_entries
+        page' = page
+        write' = write
+        user' = user
         OS.current_proc' = OS.current_proc
     }
 }
 
 pred traces {
-    -- Initial State: Everything is empty
-    all l1: L1PageTable, idx: L1Index | no l1.l1_entries[idx]
+    -- STATE 0: Hard-coded emptiness
+    no l1_entries
+    no l2_entries
+    no page
     
-    -- Transitions
+    -- STATE 1: DEMAND CHANGE. 
+    -- If this is UNSAT, Forge will tell us which rule is blocking it.
+    some va: VirtualAddress | allocate[va]
+
     always {
         step
     }
 }
 
 pred step {
-    { some new_proc: Process | new_proc != OS.current_proc and context_switch[new_proc] } 
-    or 
-    { some va: VirtualAddress | allocate[va] }
-    or 
-    { do_nothing }
+    (some va: VirtualAddress | allocate[va]) or 
+    // (some va: VirtualAddress | free[va]) xor 
+    (some p: Process | p != OS.current_proc and context_switch[p]) or
+    (do_nothing)
 }
