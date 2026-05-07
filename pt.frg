@@ -4,10 +4,11 @@ open "addr.frg"
 open "utils.frg"
 
 sig L1PageTableEntry {
-    page: one PhysicalPage
-    // read: one Bool,
-    // write: one Bool,
-    // user: one Bool
+    page: one PhysicalPage,
+    // Whether the page is writable
+    write: one Bool,
+    // Whether the page is user-accessible
+    user: one Bool
 }
 
 sig L2PageTable {

@@ -42,6 +42,24 @@ pred wf__no_shared_root_pts {
     }
 }
 
+// Each physical page should only be reachable once per process.
+// I don't think this is a hard rule for VM systems, but it rules out some funky edge cases that wouldn't
+// show up in practice.
+// TODO: this is actually kinda hard, so fix if we have time...
+// pred wf__only_reachable_once_per_proc {
+//     all pa: PhysicalPage, proc: Process | {
+//         all disj va1: VirtualAddress, va2: VirtualAddress | {
+//             {not {
+//                 va1.vpn1 = va2.vpn1
+//                 va1.vpn0 = va2.vpn0
+//             }} implies {
+//                 {walk[va1, proc.root] = pa} implies {not { walk[va2, proc.root] = pa}}
+//                 {walk[va2, proc.root] = pa} implies {not { walk[va1, proc.root] = pa}}
+//             }
+//         }
+//     }
+// }
+
 pred cpu_wellformed {
     wf__no_shared_root_pts
 }
@@ -60,4 +78,4 @@ run {
     all_wellformed
     all_clean
     // all_pages_mapped
-} for exactly 4 PhysicalPage, exactly 2 Process, exactly 3 L1PageTableEntry
+} for exactly 5 PhysicalPage, exactly 2 Process, exactly 4 L1PageTableEntry
