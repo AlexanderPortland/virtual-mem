@@ -87,3 +87,6 @@ No other students. Thank you to our mentor TA, Joshua, for the guidance!
 # AI Usage
 
 We used Gemini for the visualizers, but not for the core model or testing.
+
+# Demo
+Our demo video was too big to upload directly, so you can find it [here](https://drive.google.com/file/d/1mx_OeFM4Z5oWKFLSA_w_MIR9QBwFKOcX/view?usp=sharing)!
