@@ -21,24 +21,24 @@ pred all_pages_mapped {
     }
 }
 
-pred clean__no_orphan_pagetables {
-    -- Every l1 pagetable can be accessed from the root pagetable
-    all l1_pt: L1PageTable {
-        some l2_index: L2Index, l2_pt: L2PageTable | {
-            l2_pt.l2_entries[l2_index] = l1_pt
-        }
-    }
+// pred clean__no_orphan_pagetables {
+//     -- Every l1 pagetable can be accessed from the root pagetable
+//     all l1_pt: L1PageTable {
+//         some l2_index: L2Index, l2_pt: L2PageTable | {
+//             l2_pt.l2_entries[l2_index] = l1_pt
+//         }
+//     }
 
-    -- No orphan pagetable entries either
-    all pt_entry: L1PageTableEntry | {
-        some pt: L1PageTable, index: L1Index | {
-            pt.l1_entries[index] = pt_entry
-        }
-    }
+//     -- No orphan pagetable entries either
+//     all pt_entry: L1PageTableEntry | {
+//         some pt: L1PageTable, index: L1Index | {
+//             pt.l1_entries[index] = pt_entry
+//         }
+//     }
 
-    -- Each l2 page table must be the root for some process
-    all l2: L2PageTable | some proc: Process | l2 = proc.root
-}
+//     -- Each l2 page table must be the root for some process
+//     all l2: L2PageTable | some proc: Process | l2 = proc.root
+// }
 
 pred wf__no_shared_root_pts {
     all disj proc1, proc2: Process {
@@ -84,7 +84,7 @@ pred allocate[va: VirtualAddress] {
         -- Ensure the page isn't already pointed to by any entry
         free_page not in L1PageTableEntry.page
         // -- Ensure the entry isn't already part of any L1 table
-        // new_ent not in L1PageTable.l1_entries.L1PageTableEntry
+        new_ent not in L1PageTable.l1_entries.L1PageTableEntry
         -- Ensure the L1 table isn't already in the L2 (if it's a new allocation)
         -- Note: You might want to allow sharing L1 tables if vpn1 matches!
 

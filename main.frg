@@ -34,4 +34,4 @@ run {
     // next_state { some va: VirtualAddress | allocate[va] }
     // eventually { some va: VirtualAddress | free[va] }
     // #L1PageTable > 1
-} for exactly 2 Process, exactly 10 L1PageTableEntry, exactly 5 PhysicalPage --, exactly 2 L2Index, exactly 3 L1Index, exactly 6 VirtualAddress
+} for exactly 2 Process, exactly 10 L1PageTableEntry, exactly 5 PhysicalPage, exactly 2 L1Index --, exactly 2 L2Index, exactly 3 L1Index, exactly 6 VirtualAddress

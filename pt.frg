@@ -45,12 +45,17 @@ pred wf__l1_pt_only_reachable_from_one_l2 {
 }
 
 pred wf__l1_entries_only_from_pt {
-    all entry: L1PageTableEntry {
-        lone real_l1: L1PageTable, real_index: L1Index | {
-            all other: L1PageTable, index: L1Index | {
-                other.l1_entries[index] = entry implies {
-                    other = real_l1
-                    index = real_index
+    all entry: L1PageTableEntry | {
+        -- ONLY enforce the "must have a parent" rule IF the entry is actually 
+        -- pointed to by some table.
+        some pt: L1PageTable, idx: L1Index | pt.l1_entries[idx] = entry 
+        implies {
+            lone real_l1: L1PageTable, real_index: L1Index | {
+                all other: L1PageTable, index: L1Index | {
+                    other.l1_entries[index] = entry implies {
+                        other = real_l1
+                        index = real_index
+                    }
                 }
             }
         }
