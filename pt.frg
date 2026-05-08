@@ -4,7 +4,7 @@ open "addr.frg"
 open "utils.frg"
 
 sig L1PageTableEntry {
-    var page: one PhysicalPage,
+    var page: lone PhysicalPage,
     // Whether the page is writable
     var write: one Bool,
     // Whether the page is user-accessible
@@ -29,31 +29,42 @@ fun walk(va: VirtualAddress, root: L2PageTable): lone PhysicalPage {
     l1_entry.page
 }
 
+fun walk_inner[l2: L2Index, l1: L1Index, root: L2PageTable]: lone PhysicalPage {
+    root.l2_entries[l2].l1_entries[l1].page
+}
+
 pred pt_wellformed {
     wf__l1_pt_only_reachable_from_one_l2
     wf__l1_entries_only_from_pt
+    wf__all_l1_already_exist
+}
+
+pred wf__all_l1_already_exist {
+    all l2: L2Index, pt: L2PageTable | {
+        some l1: L1PageTable | {
+            pt.l2_entries[l2] = l1
+        }
+    }
 }
 
 pred wf__l1_pt_only_reachable_from_one_l2 {
     all l1: L1PageTable {
-        one l2_parent: L2PageTable, real_index: L2Index | {
-            all other: L2PageTable, index: L2Index | other.l2_entries[index] = l1 implies {
-                other = l2_parent
-                index = real_index
-            }
+        all disj l2_a: L2PageTable, l2_b: L2PageTable | {
+            not {{
+                some index: L2Index | l2_a.l2_entries[index] = l1
+            } and {
+                some index: L2Index | l2_b.l2_entries[index] = l1
+            }}
         }
     }
 }
 
 pred wf__l1_entries_only_from_pt {
     all entry: L1PageTableEntry {
-        one real_l1: L1PageTable, real_index: L1Index | {
-            all other: L1PageTable, index: L1Index | {
-                other.l1_entries[index] = entry implies {
-                    other = real_l1
-                    index = real_index
-                }
-            }
+        -- Only if the entry is actually mapped to a page, 
+        -- then it must belong to exactly one table.
+        some entry.page implies {
+            lone l1: L1PageTable | some idx: L1Index | l1.l1_entries[idx] = entry
         }
     }
 }

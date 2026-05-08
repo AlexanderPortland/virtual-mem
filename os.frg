@@ -80,27 +80,30 @@ pred do_nothing {
 
 pred context_switch[new_proc: Process] {
     OS.current_proc' = new_proc
+    l1_entries' = l1_entries
+    page' = page
+    write' = write
+    user' = user
 }
 
 // Kernel allocate
-pred allocate[va: VirtualAddress] {
-    no walk[va, OS.current_proc.root]
+pred allocate[l1: L1Index, l2: L2Index] {
+    no walk_inner[l2, l1, OS.current_proc.root]
 
-    some free_page: PhysicalPage | {
-        all proc: Process, any_va: VirtualAddress | walk[any_va, OS.current_proc.root] != free_page
-        let entry = OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0] | {
-            -- Set the mapping and permissions in the NEXT state
-            entry.page' = free_page
-            entry.write' = True
-            entry.user' = True
+    some free_page: PhysicalPage, free_entry: L1PageTableEntry | {
+        all proc: Process, other_l1: L1Index, other_l2: L2Index | {
+            some walk_inner[other_l2, other_l1, proc.root] implies walk_inner[other_l2, other_l1, proc.root] != free_page
         }
-        all other_entry: L1PageTableEntry | {
-            (other_entry != OS.current_proc.root.l2_entries[va.vpn1].l1_entries[va.vpn0]) implies {
-                other_entry.page' = other_entry.page
-                other_entry.write' = other_entry.write
-                other_entry.user' = other_entry.user
+
+        // not {
+            all l1_fuck: L1Index, l2_fuck: L2Index, proc_fuck: Process | {
+                proc_fuck.root.l2_entries[l2_fuck].l1_entries[l1_fuck] != free_entry
             }
-        }
+        // }
+
+        l1_entries' = l1_entries + (OS.current_proc.root.l2_entries[l2] -> l1 -> free_entry)
+        page' = page + (free_entry -> free_page)
+        // l2_entries' = l2_entries
         
         OS.current_proc' = OS.current_proc
     }
@@ -108,9 +111,15 @@ pred allocate[va: VirtualAddress] {
 
 pred traces {
     -- Initial State: Everything is empty
-    all l1: L1PageTable, idx: L1Index | no l1.l1_entries[idx]
+    no l1_entries
+    // no l2_entries
+    no page
     
-    -- Transitions
+    some l1: L1Index, l2: L2Index | allocate[l1, l2]
+    next_state { some l1: L1Index, l2: L2Index | allocate[l1, l2] }
+    next_state { next_state { some new_proc: Process | new_proc != OS.current_proc and context_switch[new_proc] } }
+    next_state { next_state { next_state { some l1: L1Index, l2: L2Index | allocate[l1, l2] } } }
+    
     always {
         step
     }
@@ -119,7 +128,7 @@ pred traces {
 pred step {
     { some new_proc: Process | new_proc != OS.current_proc and context_switch[new_proc] } 
     or 
-    { some va: VirtualAddress | allocate[va] }
+    { some l1: L1Index, l2: L2Index | allocate[l1, l2] }
     or 
     { do_nothing }
 }

@@ -5,75 +5,140 @@ const container = d3.select(svg);
 if (!container.attr("data-view-mode"))
   container.attr("data-view-mode", "structural");
 let currentMode = container.attr("data-view-mode");
+
+if (!container.attr("data-state-idx")) container.attr("data-state-idx", "0");
+let current_state = parseInt(container.attr("data-state-idx"));
+
 container.selectAll("*").remove();
 
-// 2. TOGGLE BUTTON
-const btn = container
+// 2. LAYERING
+const uiLayer = container
   .append("g")
-  .attr("cursor", "pointer")
-  .on("click", (event) => {
-    event.stopPropagation();
-    currentMode = currentMode === "structural" ? "physical" : "structural";
-    container.attr("data-view-mode", currentMode);
-    updateButtonText();
-    render(currentMode);
-  });
+  .attr("class", "ui-layer")
+  .style("z-index", 10);
+const contentLayer = container.append("g").attr("class", "content-layer");
 
-btn
-  .append("rect")
-  .attr("x", 15)
-  .attr("y", 15)
-  .attr("width", 240)
-  .attr("height", 35)
-  .attr("rx", 8)
-  .attr("fill", "#222")
-  .attr("stroke", "#555");
+const zoom = d3
+  .zoom()
+  .on("zoom", (e) => contentLayer.attr("transform", e.transform));
+container.call(zoom);
 
-const btnText = btn
-  .append("text")
-  .attr("x", 135)
-  .attr("y", 37)
-  .attr("text-anchor", "middle")
-  .attr("fill", "#fff")
-  .style("font-size", "12px")
-  .style("font-family", "sans-serif")
-  .style("font-weight", "bold")
-  .style("pointer-events", "none");
+// 3. UI CONTROLS (Static Overlay)
+function drawUI() {
+  uiLayer.selectAll("*").remove();
 
-function updateButtonText() {
-  btnText.text(
-    currentMode === "structural"
-      ? "PHYSICAL PAGE ARRANGEMENT"
-      : "STRUCTURAL ARRANGEMENT"
-  );
+  const btn = uiLayer
+    .append("g")
+    .attr("cursor", "pointer")
+    .on("click", (event) => {
+      event.stopPropagation();
+      currentMode = currentMode === "structural" ? "physical" : "structural";
+      container.attr("data-view-mode", currentMode);
+      drawUI();
+      render();
+    });
+
+  btn
+    .append("rect")
+    .attr("x", 15)
+    .attr("y", 15)
+    .attr("width", 240)
+    .attr("height", 35)
+    .attr("rx", 8)
+    .attr("fill", "#222")
+    .attr("stroke", "#555");
+  btn
+    .append("text")
+    .attr("x", 135)
+    .attr("y", 37)
+    .attr("text-anchor", "middle")
+    .attr("fill", "#fff")
+    .style("font-size", "12px")
+    .style("font-family", "sans-serif")
+    .style("font-weight", "bold")
+    .text(
+      currentMode === "structural"
+        ? "PHYSICAL PAGE ARRANGEMENT"
+        : "STRUCTURAL ARRANGEMENT"
+    );
+
+  const drawStateBtn = (x, label, delta) => {
+    const sBtn = uiLayer
+      .append("g")
+      .attr("cursor", "pointer")
+      .on("click", (event) => {
+        event.stopPropagation();
+        const next = current_state + delta;
+        if (next >= 0 && next < instances.length) {
+          current_state = next;
+          container.attr("data-state-idx", current_state);
+          drawUI();
+          render();
+        }
+      });
+    sBtn
+      .append("rect")
+      .attr("x", x)
+      .attr("y", 15)
+      .attr("width", 80)
+      .attr("height", 35)
+      .attr("rx", 8)
+      .attr("fill", "#444");
+    sBtn
+      .append("text")
+      .attr("x", x + 40)
+      .attr("y", 37)
+      .attr("text-anchor", "middle")
+      .attr("fill", "#fff")
+      .style("font-size", "10px")
+      .style("font-family", "sans-serif")
+      .text(label);
+  };
+
+  drawStateBtn(265, "PREV STATE", -1);
+  drawStateBtn(355, "NEXT STATE", 1);
+
+  uiLayer
+    .append("text")
+    .attr("x", 450)
+    .attr("y", 37)
+    .attr("fill", "#333")
+    .style("font-family", "monospace")
+    .style("font-weight", "bold")
+    .text(`STATE: ${current_state} / ${instances.length - 1}`);
 }
-updateButtonText();
 
-// 3. RENDER CORE
-function render(mode) {
-  container.selectAll(".content").remove();
-  const viz = container.append("g").attr("class", "content");
+// 4. RENDER CORE
+function render() {
+  contentLayer.selectAll("*").remove();
+  const viz = contentLayer.append("g");
 
-  container.call(
-    d3.zoom().on("zoom", (e) => viz.attr("transform", e.transform))
-  );
+  const inst = instances[current_state];
 
-  const processes = instance.signature("Process").atoms();
-  const l2Field = instance.field("l2_entries");
-  const l1Field = instance.field("l1_entries");
-  const pageField = instance.field("page");
-  const writeField = instance.field("write");
-  const userField = instance.field("user");
-  const rootField = instance.field("root");
-  const physPages = instance.signature("PhysicalPage").atoms();
+  // --- FIND ACTIVE PROCESS ---
+  const osAtoms = inst.signature("OS").atoms();
+  const currentProcField = inst.field("current_proc");
+  let activeProcAtom = null;
+  if (osAtoms.length > 0) {
+    const activeTuples = osAtoms[0].join(currentProcField).tuples();
+    if (activeTuples.length > 0) activeProcAtom = activeTuples[0].atoms()[0];
+  }
+
+  const processes = inst.signature("Process").atoms();
+  const l2Field = inst.field("l2_entries").tuples();
+  const l1Field = inst.field("l1_entries").tuples();
+  const pageField = inst.field("page").tuples();
+  const writeField = inst.field("write").tuples();
+  const userField = inst.field("user").tuples();
+  const rootField = inst.field("root");
+  const physPages = inst.signature("PhysicalPage").atoms();
 
   const ramY = 550;
   const hardwareXMap = {};
   physPages.forEach((p, i) => (hardwareXMap[p.id()] = i * 220 + 150));
 
-  // Physical Memory Slots
-  if (mode === "physical") {
-    const busG = viz.append("g").attr("class", "bus-bg");
+  if (currentMode === "physical") {
+    const busG = viz.append("g");
     physPages.forEach((p) => {
       const x = hardwareXMap[p.id()];
       busG
@@ -93,45 +158,42 @@ function render(mode) {
         .attr("text-anchor", "middle")
         .style("font-size", "12px")
         .style("font-family", "monospace")
-        .attr("fill", "#333")
         .text(p.id().split("$")[0]);
     });
   }
 
   processes.forEach((proc, pIdx) => {
+    const isActive = activeProcAtom && proc.id() === activeProcAtom.id();
+
     const treeData = {
-      name: proc.id().split("$")[0],
+      name: proc.id().split("$")[0] + (isActive ? " (RUNNING)" : ""),
       type: "Process",
+      active: isActive,
       children: [],
     };
-    const l2TableRel = proc.join(rootField);
 
-    if (!l2TableRel.empty()) {
-      const l2Atom = l2TableRel.tuples()[0].atoms()[0];
+    const l2TableRel = proc.join(rootField).tuples();
+    if (l2TableRel.length > 0) {
+      const l2Atom = l2TableRel[0].atoms()[0];
       const l2Node = { name: "L2", children: [] };
-
       l2Field
-        .tuples()
         .filter((t) => t.atoms()[0].id() === l2Atom.id())
         .forEach((t2) => {
           const l1Atom = t2.atoms()[2];
           const l1Node = { name: "L1", children: [] };
-
           l1Field
-            .tuples()
             .filter((t1) => t1.atoms()[0].id() === l1Atom.id())
             .forEach((t1) => {
               const entry = t1.atoms()[2];
-              const pgT = pageField
-                .tuples()
-                .find((t) => t.atoms()[0].id() === entry.id());
-              const wrT = writeField
-                .tuples()
-                .find((t) => t.atoms()[0].id() === entry.id());
-              const usT = userField
-                .tuples()
-                .find((t) => t.atoms()[0].id() === entry.id());
-
+              const pgT = pageField.find(
+                (t) => t.atoms()[0].id() === entry.id()
+              );
+              const wrT = writeField.find(
+                (t) => t.atoms()[0].id() === entry.id()
+              );
+              const usT = userField.find(
+                (t) => t.atoms()[0].id() === entry.id()
+              );
               if (pgT) {
                 l1Node.children.push({
                   name: pgT.atoms()[1].id().split("$")[0],
@@ -144,7 +206,7 @@ function render(mode) {
             });
           if (l1Node.children.length > 0) l2Node.children.push(l1Node);
         });
-      treeData.children.push(l2Node);
+      if (l2Node.children.length > 0) treeData.children.push(l2Node);
     }
 
     const treeLayout = d3.tree().nodeSize([140, 160]);
@@ -157,7 +219,7 @@ function render(mode) {
       .append("g")
       .attr("transform", `translate(${xOffset}, ${yOffset})`);
 
-    if (mode === "physical") {
+    if (currentMode === "physical") {
       hierarchy.descendants().forEach((d) => {
         if (d.data.type === "Page") {
           d.x = hardwareXMap[d.data.physId] - xOffset;
@@ -166,7 +228,7 @@ function render(mode) {
       });
     }
 
-    // 4. EDGES
+    // Edges
     g.selectAll(".link")
       .data(hierarchy.links())
       .enter()
@@ -191,22 +253,22 @@ function render(mode) {
           .y((d) => d.y)
       );
 
-    // 5. CENTERED PERMISSION BUBBLES
-    const bW = 52; // Bubble Width
-    const bH = 16; // Bubble Height
-
+    // Permission Bubbles
+    const bW = 52;
+    const bH = 16;
     const labelGroups = g
       .selectAll(".edge-label-group")
       .data(hierarchy.links().filter((d) => d.target.data.type === "Page"))
       .enter()
       .append("g")
-      .attr("transform", (d) => {
-        const midX = (d.source.x + d.target.x) / 2 + 14;
-        const midY = (d.source.y + d.target.y) / 2;
-        return `translate(${midX}, ${midY})`;
-      });
+      .attr(
+        "transform",
+        (d) =>
+          `translate(${(d.source.x + d.target.x) / 2 + 14}, ${
+            (d.source.y + d.target.y) / 2
+          })`
+      );
 
-    // Bubble Background (Centered at 0,0 relative to group)
     labelGroups
       .append("rect")
       .attr("x", -bW / 2)
@@ -219,11 +281,10 @@ function render(mode) {
       .attr("stroke", (d) => (d.target.data.writable ? "#e15759" : "#4e79a7"))
       .attr("stroke-width", 1);
 
-    // Bubble Text (Center-aligned)
     labelGroups
       .append("text")
       .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central") // Perfectly vertical center
+      .attr("dominant-baseline", "central")
       .style("font-size", "9px")
       .style("font-weight", "bold")
       .style("font-family", "monospace")
@@ -235,7 +296,7 @@ function render(mode) {
           }`
       );
 
-    // 6. NODES
+    // Nodes
     const nodes = g
       .selectAll(".node")
       .data(hierarchy.descendants())
@@ -245,28 +306,32 @@ function render(mode) {
 
     nodes
       .append("circle")
-      .attr("r", 12)
+      .attr("r", 14)
       .attr("fill", (d) =>
         d.data.type === "Process"
-          ? "#4e79a7"
+          ? d.data.active
+            ? "#f39c12"
+            : "#4e79a7"
           : d.data.type === "Page"
           ? "#fff"
           : "#76b7b2"
       )
-      .attr("stroke", "#333")
-      .attr("stroke-width", 2);
+      .attr("stroke", (d) => (d.data.active ? "#e67e22" : "#333"))
+      .attr("stroke-width", (d) => (d.data.active ? 5 : 2));
 
     nodes
       .append("text")
-      .attr("dy", "-1.8em")
+      .attr("dy", "-2.2em")
       .attr("text-anchor", "middle")
       .style("font-size", "12px")
       .style("font-family", "monospace")
       .style("font-weight", "bold")
+      .attr("fill", (d) => (d.data.active ? "#d35400" : "#333"))
       .text((d) =>
-        mode === "physical" && d.data.type === "Page" ? "" : d.data.name
+        currentMode === "physical" && d.data.type === "Page" ? "" : d.data.name
       );
   });
 }
 
-render(currentMode);
+drawUI();
+render();
