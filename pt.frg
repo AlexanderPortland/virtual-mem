@@ -61,10 +61,59 @@ pred wf__l1_pt_only_reachable_from_one_l2 {
 
 pred wf__l1_entries_only_from_pt {
     all entry: L1PageTableEntry {
-        -- Only if the entry is actually mapped to a page, 
-        -- then it must belong to exactly one table.
         some entry.page implies {
             lone l1: L1PageTable | some idx: L1Index | l1.l1_entries[idx] = entry
         }
     }
+}
+
+test expect {
+  walk_finds_page: {
+    some l1: L1Index, l2: L2Index, root: L2PageTable, pt: L1PageTable, 
+         ent: L1PageTableEntry, pg: PhysicalPage, va: VirtualAddress | {
+      va.vpn1 = l2
+      va.vpn0 = l1
+      root.l2_entries[l2] = pt
+      pt.l1_entries[l1] = ent
+      ent.page = pg
+      
+      walk[va, root] = pg
+      walk_inner[l2, l1, root] = pg
+    }
+  } is sat
+
+  walk_fails_gracefully: {
+    all va: VirtualAddress, root: L2PageTable | {
+      no root.l2_entries[va.vpn1] implies no walk[va, root]
+    }
+  } is sat
+}
+
+test expect {
+  must_have_all_l1: {
+    pt_wellformed
+    some pt: L2PageTable, idx: L2Index | no pt.l2_entries[idx]
+  } is unsat
+
+  no_shared_l1_v2: {
+      pt_wellformed
+      some l1: L1PageTable | {
+          some disj l2a, l2b: L2PageTable | {
+          (some i: L2Index | l2a.l2_entries[i] = l1)
+          (some j: L2Index | l2b.l2_entries[j] = l1)
+          }
+      }
+  } is unsat
+}
+
+test expect {
+  valid_full_system: {
+    pt_wellformed
+    some va: VirtualAddress, root: L2PageTable | some walk[va, root]
+  } for exactly 1 L2PageTable, 
+    exactly 2 L1PageTable, 
+    exactly 2 L2Index, 
+    exactly 2 L1Index, 
+    exactly 4 VirtualAddress,
+    exactly 5 L1PageTableEntry is sat
 }

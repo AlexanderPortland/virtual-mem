@@ -15,7 +15,7 @@ option min_tracelength 5
 pred all_wellformed {
     addr_wellformed
     pt_wellformed
-    cpu_wellformed
+    os_wellformed
 }
 
 run {
